@@ -72,55 +72,45 @@
 - Build responsive PWA first; wrap with React Native WebView for push notifications & native calendar integration.
 - Offline caching of upcoming bookings using service workers + IndexedDB.
 
+### 4.6 Page-by-Page Component Breakdown
+| Page | Key Components | Data Sources | Security Considerations |
+| --- | --- | --- | --- |
+| Landing / Discovery | HeroBanner, ServiceFilterBar, Testimonials, FAQAccordion | `/api/v1/bookings/services`, CMS/FAQ JSON | Public; track analytics events anonymously. |
+| Calendar & Slots | CalendarGrid, SlotList, TimezoneSwitcher, AvailabilityLegend | `/api/v1/bookings/availability` | JWT required, enforce tenant isolation in queries. |
+| Booking Confirmation | BookingSummaryCard, ScreeningForm, ConsentCheckbox, PaymentPlaceholder | `/api/v1/bookings`, policy documents | PII encryption in transit, consent logging. |
+| Member Dashboard | UpcomingList, PastVisitsTable, ReminderPreferences, ChatbotEntry | `/api/v1/bookings`, `/api/v1/users/me`, `/api/v1/chatbot/query` | JWT, RLS to prevent cross-tenant data access. |
+| Staff Schedule | StaffAvailabilityCalendar, WaitlistPanel, QuickActions | `/api/v1/bookings`, `/api/v1/services` | RBAC (STAFF/Admin), audit actions. |
+| Analytics | UtilizationChart, NoShowTrend, RecommendationCards | `/api/v1/analytics/*` | RBAC (Admin/Staff), export with watermarking. |
+| Settings | TemplateEditor, StaffManager, PolicyUploader | `/api/v1/reminders/*`, `/api/v1/users` | Admin-only, activity logging. |
+| Support/Chat | ChatWidget, SuggestedArticles, EscalationButton | `/api/v1/chatbot/query`, internal FAQ | Mask PII from logs, auto-delete transcripts per policy. |
+
 ## 5. Backend Service Structure (Node.js + Express + TypeScript)
+The repository contains a reference implementation in `portal/node-backend` demonstrating secure Express architecture with Prisma and modular domains.
 ```
 backend/
 ├─ src/
 │  ├─ app.ts (Express bootstrap, security middleware)
 │  ├─ config/
 │  │   ├─ env.ts (dotenv, runtime schema validation)
-│  │   └─ secrets.ts (secret manager integration)
+│  │   └─ logger.ts (structured logging)
+│  ├─ database/
+│  │   └─ prisma.ts (Prisma client singleton)
 │  ├─ middleware/
 │  │   ├─ authGuard.ts (JWT verification, role checks)
-│  │   ├─ rateLimiter.ts (Redis-based)
-│  │   └─ errorHandler.ts (structured logging)
+│  │   └─ errorHandler.ts (structured error responses)
 │  ├─ modules/
-│  │   ├─ auth/
-│  │   │   ├─ auth.controller.ts
-│  │   │   ├─ auth.service.ts (OAuth2, passwordless, MFA)
-│  │   │   └─ auth.routes.ts
-│  │   ├─ users/
-│  │   │   ├─ users.controller.ts
-│  │   │   ├─ users.service.ts (profile encryption via pgcrypto)
-│  │   │   └─ users.repository.ts
-│  │   ├─ bookings/
-│  │   │   ├─ bookings.controller.ts
-│  │   │   ├─ bookings.service.ts (slot engine, conflict detection)
-│  │   │   └─ bookings.repository.ts
-│  │   ├─ reminders/
-│  │   │   ├─ reminders.service.ts (SendGrid/Twilio clients)
-│  │   │   └─ reminders.scheduler.ts (BullMQ/Cloud Tasks)
-│  │   ├─ analytics/
-│  │   │   ├─ analytics.controller.ts
-│  │   │   └─ analytics.service.ts (materialized views, ML hooks)
-│  │   └─ chatbot/
-│  │       ├─ chatbot.controller.ts
-│  │       └─ chatbot.service.ts (FAQ retrieval, LLM API)
-│  ├─ integrations/
-│  │   ├─ twilioClient.ts
-│  │   ├─ sendgridClient.ts
-│  │   └─ openAiClient.ts
-│  ├─ jobs/
-│  │   └─ reminderWorker.ts
-│  ├─ utils/
-│  │   ├─ crypto.ts (AES-256-GCM encryption helpers)
-│  │   ├─ timezone.ts (luxon wrappers)
-│  │   └─ logger.ts (Pino structured logs)
-│  └─ index.ts
-├─ tests/ (integration + unit with Jest/Supertest)
-└─ prisma/ or migrations/ (Knex/Prisma schema)
+│  │   ├─ auth/ (signup/login/refresh flows)
+│  │   ├─ users/ (profile management)
+│  │   ├─ bookings/ (slot logic, cancellation policy)
+│  │   ├─ reminders/ (Twilio/SendGrid integrations)
+│  │   ├─ analytics/ (attendance/no-show summaries)
+│  │   └─ chatbot/ (AI FAQ adapter using OpenAI)
+│  ├─ integrations/ (Twilio, SendGrid, OpenAI clients)
+│  └─ utils/ (AES-256-GCM helpers, timezone conversions)
+├─ prisma/schema.prisma (PostgreSQL data model)
+└─ README.md (startup + deployment guidance)
 ```
-- Use Helmet, CORS, compression, input validation (Zod/Joi), CSRF for web flows.
+- Use Helmet, CORS, compression, input validation (Zod), CSRF for web flows.
 - Adopt OpenAPI/Swagger for documentation; integrate Spectral linting.
 
 ## 6. Database Design (PostgreSQL)

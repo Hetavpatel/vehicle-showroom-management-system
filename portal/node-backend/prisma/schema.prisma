@@ -1,0 +1,249 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Tenant {
+  id         String   @id @default(cuid())
+  name       String
+  locale     String   @default("en-US")
+  timezone   String   @default("America/New_York")
+  members    User[]
+  locations  Location[]
+  services   Service[]
+  bookings   Booking[]
+  reminders  ReminderTemplate[]
+  auditLogs  AuditLog[]
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model User {
+  id            String         @id @default(cuid())
+  email         String         @unique
+  passwordHash  String?
+  authProvider  String         @default("local")
+  role          UserRole       @default(MEMBER)
+  status        UserStatus     @default(ACTIVE)
+  lastLoginAt   DateTime?
+  tenant        Tenant         @relation(fields: [tenantId], references: [id])
+  tenantId      String
+  profile       UserProfile?
+  staff         Staff?
+  bookings      Booking[]      @relation("MemberBookings")
+  reminders     Reminder[]
+  chatbotEvents ChatbotSession[]
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+}
+
+enum UserRole {
+  ADMIN
+  STAFF
+  MEMBER
+}
+
+enum UserStatus {
+  ACTIVE
+  INVITED
+  DISABLED
+}
+
+model UserProfile {
+  id              String   @id @default(cuid())
+  user            User     @relation(fields: [userId], references: [id])
+  userId          String   @unique
+  firstName       String
+  lastName        String
+  phoneEncrypted  String
+  dobEncrypted    String?
+  timezone        String
+  consentFlags    Json
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model Location {
+  id          String   @id @default(cuid())
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  tenantId    String
+  name        String
+  addressEncrypted String
+  timezone    String
+  services    Service[]
+  staff       StaffAvailability[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Service {
+  id                String     @id @default(cuid())
+  tenant            Tenant     @relation(fields: [tenantId], references: [id])
+  tenantId          String
+  type              ServiceType
+  name              String
+  description       String?
+  durationMinutes   Int
+  capacity          Int?
+  requiresScreening Boolean     @default(false)
+  location          Location?   @relation(fields: [locationId], references: [id])
+  locationId        String?
+  staff             Staff[]
+  bookings          Booking[]
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+}
+
+enum ServiceType {
+  CLASS
+  APPOINTMENT
+}
+
+model Staff {
+  id             String              @id @default(cuid())
+  user           User                @relation(fields: [userId], references: [id])
+  userId         String              @unique
+  clinicianType  String?
+  bio            String?
+  credentialsUrl String?
+  services       Service[]
+  availability   StaffAvailability[]
+  bookings       Booking[]           @relation("StaffBookings")
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+}
+
+model StaffAvailability {
+  id            String   @id @default(cuid())
+  staff         Staff    @relation(fields: [staffId], references: [id])
+  staffId       String
+  dayOfWeek     Int
+  startTime     String
+  endTime       String
+  recurrenceRule String?
+  location      Location? @relation(fields: [locationId], references: [id])
+  locationId    String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model Booking {
+  id          String   @id @default(cuid())
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  tenantId    String
+  service     Service  @relation(fields: [serviceId], references: [id])
+  serviceId   String
+  member      User     @relation("MemberBookings", fields: [memberId], references: [id])
+  memberId    String
+  staff       Staff?   @relation("StaffBookings", fields: [staffId], references: [id])
+  staffId     String?
+  startAt     DateTime
+  endAt       DateTime
+  status      BookingStatus @default(BOOKED)
+  source      String?
+  notesEncrypted String?
+  reminders   Reminder[]
+  attendance  BookingAttendance?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+enum BookingStatus {
+  BOOKED
+  CONFIRMED
+  CANCELED
+  NO_SHOW
+  WAITLISTED
+}
+
+model BookingAttendance {
+  id         String   @id @default(cuid())
+  booking    Booking  @relation(fields: [bookingId], references: [id])
+  bookingId  String   @unique
+  checkInAt  DateTime?
+  status     AttendanceStatus
+  notes      String?
+}
+
+enum AttendanceStatus {
+  CHECKED_IN
+  NO_SHOW
+  LATE
+  COMPLETED
+}
+
+model ReminderTemplate {
+  id        String     @id @default(cuid())
+  tenant    Tenant     @relation(fields: [tenantId], references: [id])
+  tenantId  String
+  type      ReminderType
+  channel   ReminderChannel
+  subject   String?
+  body      String
+  offsetMinutes Int
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  reminders Reminder[]
+}
+
+enum ReminderType {
+  BOOKING_CONFIRMATION
+  UPCOMING_REMINDER
+  FOLLOW_UP
+}
+
+enum ReminderChannel {
+  EMAIL
+  SMS
+  PUSH
+}
+
+model Reminder {
+  id         String     @id @default(cuid())
+  booking    Booking    @relation(fields: [bookingId], references: [id])
+  bookingId  String
+  channel    ReminderChannel
+  sendAt     DateTime
+  status     ReminderStatus @default(PENDING)
+  payload    Json
+  sentAt     DateTime?
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+}
+
+enum ReminderStatus {
+  PENDING
+  SENT
+  FAILED
+  CANCELED
+}
+
+model ChatbotSession {
+  id             String   @id @default(cuid())
+  user           User?    @relation(fields: [userId], references: [id])
+  userId         String?
+  tenant         Tenant   @relation(fields: [tenantId], references: [id])
+  tenantId       String
+  context        Json
+  transcript     Json
+  escalated      Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  expiresAt      DateTime
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  tenantId  String
+  user      User?    @relation(fields: [userId], references: [id])
+  userId    String?
+  action    String
+  resource  String
+  metadata  Json
+  createdAt DateTime @default(now())
+}
+
